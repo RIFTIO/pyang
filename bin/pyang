@@ -4,6 +4,9 @@ import sys
 import os
 import optparse
 import re
+import io
+if sys.version < '3':
+    import codecs
 
 import pyang
 from pyang import plugin
@@ -70,6 +73,16 @@ Validates the YANG module in <filename> (or stdin), and all its dependencies."""
                              dest="ignore_errors",
                              action="store_true",
                              help="Ignore all errors.  Use with care."),
+
+        optparse.make_option("--ignore-warning",
+                             dest="ig_warnings",
+                             action="append",
+                             default=[],
+                             metavar="CODE",
+                             help="Ignore the specific warning, if the code is a "\
+                                  "warning. For a list of warnings, use --list-errors. "\
+                                  "This option is redundant if -Wnone is specified"),
+
         optparse.make_option("--canonical",
                              dest="canonical",
                              action="store_true",
@@ -270,10 +283,8 @@ Validates the YANG module in <filename> (or stdin), and all its dependencies."""
         r = re.compile(r"^(.*?)(\@(\d{4}-\d{2}-\d{2}))?\.(yang|yin)$")
         for filename in filenames:
             try:
-                fd = open(filename)
+                fd = io.open(filename, "r", encoding="utf-8")
                 text = fd.read()
-                if sys.version < "3":
-                    text = unicode(text, encoding="utf-8")
             except IOError as ex:
                 sys.stderr.write("error %s: %s\n" % (filename, str(ex)))
                 sys.exit(1)
@@ -304,10 +315,8 @@ Validates the YANG module in <filename> (or stdin), and all its dependencies."""
     # apply deviations
     for filename in ctx.opts.deviations:
         try:
-            fd = open(filename)
+            fd = io.open(filename, "r", encoding="utf-8")
             text = fd.read()
-            if sys.version < "3":
-                text = unicode(text, encoding="utf-8")
         except IOError as ex:
             sys.stderr.write("error %s: %s\n" % (filename, str(ex)))
             sys.exit(1)
@@ -372,7 +381,7 @@ Validates the YANG module in <filename> (or stdin), and all its dependencies."""
             if 'error' in o.warnings and etag not in o.warnings:
                 kind = "error"
                 exit_code = 1
-            elif 'none' in o.warnings:
+            elif etag in o.ig_warnings or 'none' in o.warnings:
                 continue
         else:
             kind = "error"
@@ -386,10 +395,16 @@ Validates the YANG module in <filename> (or stdin), and all its dependencies."""
     if emit_obj is not None and len(modules) > 0:
         tmpfile = None
         if o.outfile == None:
-            fd = sys.stdout
+            if sys.version < '3':
+                fd = codecs.getwriter('utf8')(sys.stdout)
+            else:
+                fd = sys.stdout
         else:
             tmpfile = o.outfile + ".tmp"
-            fd = open(tmpfile, "w+")
+            if sys.version < '3':
+                fd = codecs.open(tmpfile, "w+", encoding="utf-8")
+            else:
+                fd = io.open(tmpfile, "w+", encoding="utf-8")
         try:
             emit_obj.emit(ctx, modules, fd)
         except error.EmitError as e:
